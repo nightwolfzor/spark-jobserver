@@ -21,12 +21,13 @@ object JobServerBuild extends Build {
   )
 
   import Dependencies._
+  import JobServerRelease._
 
   lazy val akkaApp = Project(id = "akka-app", base = file("akka-app"),
     settings = commonSettings210 ++ Seq(
       description := "Common Akka application stack: metrics, tracing, logging, and more.",
       libraryDependencies ++= coreTestDeps ++ akkaDeps
-    )
+    ) ++ publishSettings
   )
 
   lazy val jobServer = Project(id = "job-server", base = file("job-server"),
@@ -39,6 +40,8 @@ object JobServerBuild extends Build {
       test in Test <<= (test in Test).dependsOn(packageBin in Compile in jobServerTestJar)
                                      .dependsOn(clean in Compile in jobServerTestJar),
 
+      console in Compile <<= Defaults.consoleTask(fullClasspath in Compile, console in Compile),
+
       // Adds the path of extra jars to the front of the classpath
       fullClasspath in Compile <<= (fullClasspath in Compile).map { classpath =>
         extraJarPaths ++ classpath
@@ -49,34 +52,37 @@ object JobServerBuild extends Build {
       javaOptions in Revolver.reStart += "-Djava.security.krb5.realm= -Djava.security.krb5.kdc=",
       // This lets us add Spark back to the classpath without assembly barfing
       fullClasspath in Revolver.reStart := (fullClasspath in Compile).value
-      )
-  ) dependsOn(akkaApp)
+      ) ++ publishSettings
+  ) dependsOn(akkaApp, jobServerApi)
 
   lazy val jobServerTestJar = Project(id = "job-server-tests", base = file("job-server-tests"),
-    settings = commonSettings210 ++ Seq(libraryDependencies ++= sparkDeps,
-                                        publish      := {},
+    settings = commonSettings210 ++ Seq(libraryDependencies ++= sparkDeps ++ apiDeps,
+                                        publishArtifact := false,
                                         description := "Test jar for Spark Job Server",
                                         exportJars := true)   // use the jar instead of target/classes
-  )
+  ) dependsOn(jobServerApi)
+
+  lazy val jobServerApi = Project(id = "job-server-api", base = file("job-server-api"),
+    settings = commonSettings210 ++ publishSettings
+                                    )
 
   // This meta-project aggregates all of the sub-projects and can be used to compile/test/style check
   // all of them with a single command.
   //
-  // Note: SBT's default project is the one with the first lexicographical variable name, so we
-  // prepend "aaa" to the project name here.
-  lazy val aaaMasterProject = Project(
-    id = "master", base = file("master")
-  ) aggregate(jobServer, jobServerTestJar, akkaApp
-  ) settings(
+  // NOTE: if we don't define a root project, SBT does it for us, but without our settings
+  lazy val root = Project(
+    id = "root", base = file("."),
+    settings =
+      commonSettings210 ++ ourReleaseSettings ++ Seq(
       parallelExecution in Test := false,
-      publish      := {},
+      publishArtifact := false,
       concurrentRestrictions := Seq(
         Tags.limit(Tags.CPU, java.lang.Runtime.getRuntime().availableProcessors()),
         // limit to 1 concurrent test task, even across sub-projects
         // Note: some components of tests seem to have the "Untagged" tag rather than "Test" tag.
         // So, we limit the sum of "Test", "Untagged" tags to 1 concurrent
         Tags.limitSum(1, Tags.Test, Tags.Untagged))
-  )
+  )) aggregate(jobServer, jobServerApi, jobServerTestJar, akkaApp)
 
   // To add an extra jar to the classpath when doing "re-start" for quick development, set the
   // env var EXTRA_JAR to the absolute full path to the jar
@@ -87,12 +93,12 @@ object JobServerBuild extends Build {
   // Create a default Scala style task to run with compiles
   lazy val runScalaStyle = taskKey[Unit]("testScalaStyle")
 
-  lazy val commonSettings210 = Defaults.defaultSettings ++ dirSettings ++ Seq(
-    organization := "ooyala.cnd",
-    version      := "0.3.1",
+  lazy val commonSettings210 = Defaults.defaultSettings ++ dirSettings ++ implicitlySettings ++ Seq(
+    organization := "spark.jobserver",
     crossPaths   := false,
     scalaVersion := "2.10.4",
     scalaBinaryVersion := "2.10",
+    publishTo    := Some(Resolver.file("Unused repo", file("target/unusedrepo"))),
 
     runScalaStyle := {
       org.scalastyle.sbt.PluginKeys.scalastyle.toTask("").value
@@ -105,7 +111,7 @@ object JobServerBuild extends Build {
     scalacOptions := Seq("-deprecation", "-feature",
                          "-language:implicitConversions", "-language:postfixOps"),
     resolvers    ++= Dependencies.repos,
-    libraryDependencies ++= commonDeps,
+    libraryDependencies ++= apiDeps,
     parallelExecution in Test := false,
     // We need to exclude jms/jmxtools/etc because it causes undecipherable SBT errors  :(
     ivyXML :=
@@ -114,7 +120,7 @@ object JobServerBuild extends Build {
         <exclude module="jmxtools"/>
         <exclude module="jmxri"/>
       </dependencies>
-  ) ++ scalariformPrefs ++ ScalastylePlugin.Settings ++ scoverageSettings ++ publishSettings
+  ) ++ scalariformPrefs ++ ScalastylePlugin.Settings ++ scoverageSettings
 
   lazy val scoverageSettings = {
     import ScoverageSbtPlugin._
@@ -126,7 +132,7 @@ object JobServerBuild extends Build {
 
   lazy val publishSettings = bintrayPublishSettings ++ Seq(
     licenses += ("Apache-2.0", url("http://choosealicense.com/licenses/apache/")),
-    bintray.Keys.bintrayOrganization in bintray.Keys.bintray := Some("ooyala")
+    bintray.Keys.bintrayOrganization in bintray.Keys.bintray := Some("spark-jobserver")
   )
 
   // change to scalariformSettings for auto format on compile; defaultScalariformSettings to disable

@@ -1,7 +1,9 @@
+[![Build Status](https://travis-ci.org/spark-jobserver/spark-jobserver.svg?branch=master)](https://travis-ci.org/spark-jobserver/spark-jobserver)
+
 spark-jobserver provides a RESTful interface for submitting and managing [Apache Spark](http://spark-project.org) jobs, jars, and job contexts.
 This repo contains the complete Spark job server project, including unit tests and deploy scripts.
 
-We deploy our job server off of this repo at Ooyala and it is tested against CDH5 / Hadoop 2.2,  Spark 1.0.2 final, Scala 2.10.
+See [Troubleshooting Tips](docs/troubleshooting.md).
 
 ## Features
 
@@ -15,23 +17,33 @@ We deploy our job server off of this repo at Ooyala and it is tested against CDH
 - Job and jar info is persisted via a pluggable DAO interface
 - Named RDDs to cache and retrieve RDDs by name, improving RDD sharing and reuse among jobs. 
 
+## Version Information
+
+| Version     | Spark Version |
+|-------------|---------------|
+| 0.3.1       | 0.9.1         |
+| 0.4.0       | 1.0.2         |
+| 0.4.1       | 1.1.0         |
+
+For release notes, look in the `notes/` directory.  They should also be up on [ls.implicit.ly](http://ls.implicit.ly/spark-jobserver/spark-jobserver).
+
 ## Quick start / development mode
 
 You need to have [SBT](http://www.scala-sbt.org/release/docs/Getting-Started/Setup.html) installed.
 
-From SBT shell, simply type "re-start".  This uses a default configuration file.  An optional argument is a
+From SBT shell, simply type "reStart".  This uses a default configuration file.  An optional argument is a
 path to an alternative config file.  You can also specify JVM parameters after "---".  Including all the
 options looks like this:
 
-    re-start /path/to/my.conf --- -Xmx8g
+    reStart /path/to/my.conf --- -Xmx8g
 
-Note that re-start (SBT Revolver) forks the job server in a separate process.  If you make a code change, simply
-type re-start again at the SBT shell prompt, it will compile your changes and restart the jobserver.  It enables
+Note that reStart (SBT Revolver) forks the job server in a separate process.  If you make a code change, simply
+type reStart again at the SBT shell prompt, it will compile your changes and restart the jobserver.  It enables
 very fast turnaround cycles.
 
 For example jobs see the job-server-tests/ project / folder.
 
-When you use `re-start`, the log file goes to `job-server/job-server-local.log`.  There is also an environment variable
+When you use `reStart`, the log file goes to `job-server/job-server-local.log`.  There is also an environment variable
 EXTRA_JAR for adding a jar to the classpath.
 
 ### WordCountExample walk-through
@@ -41,7 +53,7 @@ Then go ahead and start the job server using the instructions above.
 
 Let's upload the jar:
 
-    curl --data-binary @job-server-tests/target/job-server-tests-0.3.1.jar localhost:8090/jars/test
+    curl --data-binary @job-server-tests/target/job-server-tests-0.4.0.jar localhost:8090/jars/test
     OK⏎
 
 The above jar is uploaded as app `test`.  Next, let's start an ad-hoc word count job, meaning that the job
@@ -105,9 +117,9 @@ Note the addition of `context=` and `sync=true`.
 ## Create a Job Server Project
 In your `build.sbt`, add this to use the job server jar:
 
-	resolvers += "Ooyala Bintray" at "http://dl.bintray.com/ooyala/maven"
+	resolvers += "Job Server Bintray" at "http://dl.bintray.com/spark-jobserver/maven"
 
-	libraryDependencies += "ooyala.cnd" % "job-server" % "0.3.1" % "provided"
+	libraryDependencies += "spark.jobserver" % "job-server-api" % "0.4.0" % "provided"
 
 For most use cases it's better to have the dependencies be "provided" because you don't want SBT assembly to include the whole job server jar.
 
@@ -187,7 +199,8 @@ def validate(sc:SparkContext, config: Contig): SparkJobValidation = {
 1. Copy `config/local.sh.template` to `<environment>.sh` and edit as appropriate.
 2. `bin/server_deploy.sh <environment>` -- this packages the job server along with config files and pushes
    it to the remotes you have configured in `<environment>.sh`
-3. On the remote server, start it in the deployed directory with `server_start.sh`.
+3. On the remote server, start it in the deployed directory with `server_start.sh` and stop it with `server_stop.sh`
+
 
 Note: to test out the deploy to a local staging dir, or package the job server for Mesos,
 use `bin/server_package.sh <environment>`.
@@ -285,7 +298,7 @@ Contributions via Github Pull Request are welcome.  See the TODO for some ideas.
 - Logging for tests goes to "job-server-test.log"
 - Run `scoverage:test` to check the code coverage and improve it
 - Please run scalastyle to ensure your code changes don't break the style guide
-- Do "re-start" from SBT for quick restarts of the job server process
+- Do "reStart" from SBT for quick restarts of the job server process
 - Please update the g8 template if you change the SparkJob API
 
 ### Publishing packages
@@ -293,6 +306,13 @@ Contributions via Github Pull Request are welcome.  See the TODO for some ideas.
 - Be sure you are in the master project
 - Run `test` to ensure all tests pass
 - Now just run `publish` and package will be published to bintray
+
+To announce the release on [ls.implicit.ly](http://ls.implicit.ly/), use
+[Herald](https://github.com/n8han/herald#install) after adding release notes in
+the `notes/` dir.  Also regenerate the catalog with `lsWriteVersion` SBT task
+and `lsync`, in project job-server.
+
+TODO: Automate the above steps with `sbt-release`.
 
 ## Contact
 
@@ -310,10 +330,6 @@ Copyright(c) 2014, Ooyala, Inc.
 ## TODO
 
 - Add Swagger support.  See the spray-swagger project.
-- Implement a main index.html.  It should display:
-    - All the running contexts
-    - All the current jobs in each running context
-
 - Implement an interactive SQL window.  See: [spark-admin](https://github.com/adatao/spark-admin)
 
 - Use `SparkContext.setJobGroup` with the job ID

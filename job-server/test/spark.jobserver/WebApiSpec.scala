@@ -2,6 +2,7 @@ package spark.jobserver
 
 import akka.actor.{Actor, Props}
 import com.typesafe.config.ConfigFactory
+import spark.jobserver.SparkWebUiActor.{GetWorkerStatus, SparkWorkersInfo}
 import spark.jobserver.io.{JobInfo, JarInfo}
 import org.joda.time.DateTime
 import org.scalatest.matchers.ShouldMatchers
@@ -23,14 +24,17 @@ with ScalatestRouteTest with HttpService {
 
   def actorRefFactory = system
 
-  val config = ConfigFactory.parseString("foo.bar = baz")
+  val bindConfKey = "spark.jobserver.bind-address"
+  val bindConfVal = "127.0.0.1"
+  val config = ConfigFactory.parseString(s"""$bindConfKey = "${bindConfVal}" """)
   val dummyPort = 9999
 
   // See http://doc.akka.io/docs/akka/2.2.4/scala/actors.html#Deprecated_Variants;
   // for actors declared as inner classes we need to pass this as first arg
   val dummyActor = system.actorOf(Props(classOf[DummyActor], this))
   val statusActor = system.actorOf(Props(classOf[JobStatusActor], new InMemoryDAO))
-  val api = new WebApi(system, config, dummyPort, dummyActor, dummyActor, dummyActor)
+
+  val api = new WebApi(system, config, dummyPort, dummyActor, dummyActor, dummyActor, dummyActor)
   val routes = api.myRoutes
 
   val dt = DateTime.parse("2013-05-29T00Z")
@@ -94,7 +98,7 @@ with ScalatestRouteTest with HttpService {
 
       case GetJobConfig("badjobid") => sender ! NoSuchJobId
       case GetJobConfig(_)          => sender ! config
-
+      case GetWorkerStatus() => sender ! SparkWorkersInfo(2,0)
     }
   }
 
@@ -167,7 +171,7 @@ with ScalatestRouteTest with HttpService {
         status should be (OK)
         responseAs[Map[String, Any]] should be (Map(
           StatusKey -> "OK",
-          ResultKey -> Map("foo.bar" -> "baz", "foo.baz" -> "booboo")
+          ResultKey -> Map(bindConfKey -> bindConfVal, "foo.baz" -> "booboo")
         ))
       }
     }
@@ -189,7 +193,7 @@ with ScalatestRouteTest with HttpService {
         status should be (OK)
         responseAs[Map[String, Any]] should be (Map(
           StatusKey -> "OK",
-          ResultKey -> Map("foo.bar" -> "baz", "foo.baz" -> "booboo")
+          ResultKey -> Map(bindConfKey -> bindConfVal, "foo.baz" -> "booboo")
         ))
       }
     }
@@ -201,7 +205,7 @@ with ScalatestRouteTest with HttpService {
         status should be (OK)
         responseAs[Map[String, Any]] should be (Map(
           StatusKey -> "OK",
-          ResultKey -> Map("foo.bar" -> "baz", "foo.baz" -> "booboo")
+          ResultKey -> Map(bindConfKey -> bindConfVal, "foo.baz" -> "booboo")
         ))
       }
     }
@@ -358,6 +362,15 @@ with ScalatestRouteTest with HttpService {
         status should be (OK)
       }
       Post("/contexts/meme?num-cpu-cores=3&coarse-mesos-mode=true") ~> sealRoute(routes) ~> check {
+        status should be (OK)
+      }
+    }
+  }
+
+  describe("spark alive workers") {
+    it("should return OK") {
+      // responseAs[] uses spray-json to convert JSON results back to types for easier checking
+      Get("/healthz") ~> sealRoute(routes) ~> check {
         status should be (OK)
       }
     }

@@ -9,8 +9,11 @@ if [ -z "$ENV" ]; then
   exit 0
 fi
 
+bin=`dirname "${BASH_SOURCE-$0}"`
+bin=`cd "$bin"; pwd`
+
 if [ -z "$CONFIG_DIR" ]; then
-  CONFIG_DIR="$(dirname $0)/config"
+  CONFIG_DIR=`cd "$bin"/../config/; pwd`
 fi
 configFile="$CONFIG_DIR/$ENV.sh"
 
@@ -25,6 +28,7 @@ fi
 
 FILES="job-server/target/spark-job-server.jar
        bin/server_start.sh
+       bin/server_stop.sh
        $CONFIG_DIR/$ENV.conf
        config/log4j-server.properties"
 
